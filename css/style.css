@@ -1,0 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+/* --- 1. GLOBAL RESET & SCROLLBAR --- */
+:root {
+    --primary: #10B981; /* Emerald 500 */
+    --primary-dark: #059669; /* Emerald 600 */
+    --accent: #8B5CF6; /* Violet */
+    --dark-bg: #0f172a; /* Slate 900 */
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #1e293b; 
+}
+::-webkit-scrollbar-thumb {
+    background: #475569; 
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary); 
+}
+
+/* --- 2. GLASSMORPHISM --- */
+.glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark .glass {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* Card Hover Effect (3D Lift) */
+.glass:hover {
+    transform: translateY(-5px) scale(1.01);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    border-color: rgba(16, 185, 129, 0.3); /* Slight Green Border */
+}
+
+/* --- 3. ANIMATED BUTTONS --- */
+/* Base Button Style */
+.btn {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    z-index: 1;
+}
+
+.btn:active {
+    transform: scale(0.95);
+}
+
+/* "Shine" Effect Wrapper */
+.btn-shine::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.4),
+        transparent
+    );
+    transition: 0.5s;
+    z-index: -1;
+}
+
+.btn-shine:hover::after {
+    left: 100%;
+}
+
+/* Primary Button Specifics */
+.btn-primary {
+    background: var(--primary);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+}
+
+.btn-primary:hover {
+    background: var(--primary-dark);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
+}
+
+/* --- 4. ANIMATED SEARCH INPUT --- */
+.search-container {
+    position: relative;
+    display: inline-block;
+}
+
+.search-input {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid rgba(148, 163, 184, 0.5);
+    padding: 8px 0;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    width: 180px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-bottom-color: var(--primary);
+    width: 220px; /* Expands on focus */
+}
+
+/* --- 5. PARTICLES --- */
+.particle-container {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.particle {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    opacity: 0.3;
+    animation: float 20s infinite linear;
+}
+
+@keyframes float {
+    0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+    20% { opacity: 0.6; }
+    80% { opacity: 0.6; }
+    100% { transform: translate(100px, -100vh) rotate(360deg); opacity: 0; }
+}
+
+/* --- 6. UTILITIES --- */
+.reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: all 0.8s cubic-bezier(0.5, 0, 0, 1);
+}
+
+.reveal.active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Tooltip for Heatmap */
+.heatmap-cell { position: relative; transition: transform 0.2s; }
+.heatmap-cell:hover { transform: scale(1.15); z-index: 10; }
+.heatmap-cell:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0f172a;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    pointer-events: none;
+}

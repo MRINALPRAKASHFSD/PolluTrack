@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolluTrack | Real-time Air Quality Intelligence</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        aqi: { good: '#10B981', moderate: '#FBBF24', unhealthy: '#F97316', hazardous: '#EF4444' }
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/style.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+        /* --- 1. GLOBAL RESET & SCROLLBAR --- */
+        :root {
+            --primary: #10B981; 
+            --primary-dark: #059669; 
+            --accent: #8B5CF6; 
+            --dark-bg: #0f172a; 
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+        /* --- 2. GLASSMORPHISM --- */
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .dark .glass {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .glass:hover {
+            transform: translateY(-5px) scale(1.01);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        /* --- 3. ANIMATED BUTTONS --- */
+        .btn { position: relative; overflow: hidden; transition: all 0.3s ease; z-index: 1; }
+        .btn:active { transform: scale(0.95); }
+        .btn-shine::after {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            transition: 0.5s; z-index: -1;
+        }
+        .btn-shine:hover::after { left: 100%; }
+        .btn-primary { background: var(--primary); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
+        .btn-primary:hover { background: var(--primary-dark); box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6); }
+
+        /* --- 4. ANIMATED SEARCH INPUT --- */
+        .search-container { position: relative; display: inline-block; }
+        .search-input {
+            background: transparent; border: none; border-bottom: 2px solid rgba(148, 163, 184, 0.5);
+            padding: 5px 0; color: inherit; outline: none; transition: border-color 0.3s;
+            font-weight: 600; width: 140px; transition: all 0.3s ease;
+        }
+        .search-input:focus { border-color: #10B981; width: 180px; }
+
+        /* --- 5. EDUCATIONAL TOOLTIPS --- */
+        .info-group { position: relative; cursor: help; }
+        .info-group::after {
+            content: attr(data-info);
+            position: absolute;
+            bottom: 120%; left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            width: 220px;
+            background: rgba(15, 23, 42, 0.95);
+            color: #e2e8f0;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            visibility: hidden; opacity: 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            z-index: 50;
+            text-align: center;
+            pointer-events: none;
+            border: 1px solid rgba(255,255,255,0.1);
+            font-weight: normal;
+        }
+        .info-group:hover::after {
+            visibility: visible; opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* --- 6. UTILITIES --- */
+        .particle-container { position: absolute; width: 100%; height: 100%; overflow: hidden; z-index: 1; pointer-events: none; }
+        .particle { position: absolute; background: white; border-radius: 50%; opacity: 0.3; animation: float 20s infinite linear; }
+        @keyframes float { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 0.5; } 90% { opacity: 0.5; } 100% { transform: translateY(-100vh) translateX(50px); opacity: 0; } }
+        
+        .reveal { opacity: 0; transform: translateY(30px); transition: all 0.8s cubic-bezier(0.5, 0, 0, 1); }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+
+        .heatmap-cell { position: relative; transition: transform 0.2s; }
+        .heatmap-cell:hover { transform: scale(1.15); z-index: 10; }
+        .heatmap-cell:hover::after {
+            content: attr(data-tooltip); position: absolute; bottom: 110%; left: 50%;
+            transform: translateX(-50%); background: #0f172a; color: white;
+            padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; white-space: nowrap;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3); pointer-events: none;
+        }
+
+        /* --- 7. NEW: MAP & PRINT STYLES --- */
+        #map { height: 100%; min-height: 400px; width: 100%; border-radius: 1rem; z-index: 0; }
+
+        @media print {
+            body { background: white !important; color: black !important; }
+            .no-print, video, #particles, #themeToggle, #notifyBtn { display: none !important; }
+            .glass { box-shadow: none; border: 1px solid #ccc; background: white; color: black; }
+            canvas { max-height: 300px; }
+            .text-white { color: black !important; }
+            .bg-slate-900 { background: white !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300">
+
+    <div class="fixed top-5 right-5 z-50 flex gap-3 no-print">
+        <button id="notifyBtn" class="p-3 rounded-full glass shadow-lg hover:scale-110 transition-transform active:scale-95 text-slate-600 dark:text-slate-300" title="Enable Alerts">
+            <i class="fas fa-bell"></i>
+        </button>
+        <button id="themeToggle" class="p-3 rounded-full glass shadow-lg hover:scale-110 transition-transform active:scale-95">
+            <svg id="sunIcon" class="w-6 h-6 text-yellow-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+            <svg id="moonIcon" class="w-6 h-6 text-slate-700 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+        </button>
+    </div>
+
+    <section class="relative min-h-screen flex items-center justify-center overflow-hidden bg-slate-900 text-white">
+        <video autoplay muted loop playsinline class="absolute inset-0 w-full h-full object-cover z-0">
+            <source src="assets/nature-bg.mp4" type="video/mp4">
+            <source src="assets/nature.mp4" type="video/mp4">
+            <source src="https://videos.pexels.com/video-files/855018/855018-hd_1920_1080_30fps.mp4" type="video/mp4">
+        </video>
+        
+        <div class="absolute inset-0 bg-black/40 z-0"></div>
+        <div class="particle-container" id="particles"></div>
+
+        <div class="container mx-auto px-6 relative z-10 text-center">
+            <span class="inline-block py-1 px-3 rounded-full bg-white/20 backdrop-blur-md text-xs font-semibold mb-6 border border-white/30">GLOBAL POLLUTION MONITORING</span>
+            <h1 class="text-5xl md:text-7xl font-bold mb-6 drop-shadow-2xl">Pollu<span class="text-emerald-400">Track</span></h1>
+            <h2 class="text-2xl md:text-3xl font-light mb-8 text-slate-200">Real-time Intelligence. <span class="font-bold text-white">Track. Analyze. Act.</span></h2>
+            
+            <div class="flex flex-wrap justify-center gap-8 mb-12">
+                <div class="text-center"><div class="text-4xl font-bold counter" data-target="450">0</div><div class="text-sm text-slate-300 uppercase">AQI Levels</div></div>
+                <div class="text-center border-l border-white/20 pl-8"><div class="text-4xl font-bold counter" data-target="284">0</div><div class="text-sm text-slate-300 uppercase">Cities</div></div>
+                <div class="text-center border-l border-white/20 pl-8"><div class="text-4xl font-bold counter" data-target="15000">0</div><div class="text-sm text-slate-300 uppercase">Sensors</div></div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-center gap-4 no-print">
+                <a href="#dashboard" class="btn btn-primary btn-shine px-8 py-4 text-white font-semibold rounded-lg shadow-lg hover:shadow-emerald-500/30 transition-all transform hover:-translate-y-1">View Live Data</a>
+                <button onclick="window.print()" class="px-8 py-4 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/30 rounded-lg font-bold transition">Download Report</button>
+            </div>
+        </div>
+    </section>
+
+    <section id="dashboard" class="py-20 px-6 container mx-auto">
+        <div class="flex flex-col md:flex-row justify-between items-end mb-10 reveal border-b border-slate-200 dark:border-slate-800 pb-6 no-print">
+            <div>
+                <h2 class="text-3xl font-bold mb-2">Live Dashboard</h2>
+                <div class="flex items-center gap-4 text-slate-500 dark:text-slate-400">
+                    <span>Monitoring:</span>
+                    <div class="search-container relative">
+                        <input type="text" id="citySearch" value="New Delhi" class="search-input text-slate-900 dark:text-white">
+                        <i class="fas fa-search absolute right-0 top-2 text-xs opacity-50 text-slate-500"></i>
+                    </div>
+                    <button id="locateBtn" class="p-2 rounded-full bg-slate-200 dark:bg-slate-800 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all shadow-md group" title="Use my location">
+                        <i class="fas fa-location-crosshairs group-hover:scale-110 transition-transform"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="mt-4 md:mt-0 flex flex-col items-end">
+                <div class="text-xs font-mono bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded mb-1 flex items-center gap-2">
+                    <span class="relative flex h-2 w-2">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    Live Connection Active
+                </div>
+                <div class="text-xs text-slate-400">Last Updated: <span id="lastUpdated">Just now</span></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div class="glass p-6 rounded-2xl shadow-sm hover:shadow-xl transition-shadow reveal relative overflow-hidden group">
+                <div class="absolute top-0 left-0 w-1 h-full bg-orange-500 transition-all group-hover:w-2"></div>
+                <div class="flex justify-between mb-4">
+                    <h3 class="font-semibold text-slate-500 dark:text-slate-400 info-group" 
+                        data-info="Fine particles (2.5µm) that penetrate deep into lungs and bloodstream. Major cause of respiratory issues.">
+                        PM 2.5 <i class="fas fa-info-circle text-xs ml-1 opacity-50"></i>
+                    </h3>
+                    <i class="fas fa-smog text-orange-500 opacity-50"></i>
+                </div>
+                <div class="flex items-baseline gap-2"><span id="val-pm25" class="text-4xl font-bold counter" data-target="0">--</span><span class="text-sm text-slate-400">µg/m³</span></div>
+                <div class="mt-4 w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden"><div id="bar-pm25" class="bg-orange-500 h-1.5 rounded-full transition-all duration-1000" style="width: 0%"></div></div>
+                <p class="text-xs text-orange-500 mt-2 font-medium">Unhealthy for Sensitive Groups</p>
+            </div>
+            
+            <div class="glass p-6 rounded-2xl shadow-sm hover:shadow-xl transition-shadow reveal relative overflow-hidden group">
+                <div class="absolute top-0 left-0 w-1 h-full bg-yellow-400 transition-all group-hover:w-2"></div>
+                <div class="flex justify-between mb-4">
+                    <h3 class="font-semibold text-slate-500 dark:text-slate-400 info-group"
+                        data-info="Coarse particles (10µm) like dust and pollen. Can irritate eyes, nose, and throat.">
+                        PM 10 <i class="fas fa-info-circle text-xs ml-1 opacity-50"></i>
+                    </h3>
+                    <i class="fas fa-wind text-yellow-500 opacity-50"></i>
+                </div>
+                <div class="flex items-baseline gap-2"><span id="val-pm10" class="text-4xl font-bold counter" data-target="0">--</span><span class="text-sm text-slate-400">µg/m³</span></div>
+                <div class="mt-4 w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden"><div id="bar-pm10" class="bg-yellow-400 h-1.5 rounded-full transition-all duration-1000" style="width: 0%"></div></div>
+                <p class="text-xs text-yellow-500 mt-2 font-medium">Moderate Condition</p>
+            </div>
+            
+            <div class="glass p-6 rounded-2xl shadow-sm hover:shadow-xl transition-shadow reveal relative overflow-hidden group">
+                <div class="absolute top-0 left-0 w-1 h-full bg-red-500 transition-all group-hover:w-2"></div>
+                <div class="flex justify-between mb-4">
+                    <h3 class="font-semibold text-slate-500 dark:text-slate-400">AQI Index</h3>
+                    <i class="fas fa-biohazard text-red-500 opacity-50"></i>
+                </div>
+                <div class="flex items-baseline gap-2"><span id="val-aqi" class="text-4xl font-bold counter text-red-500" data-target="0">--</span><span class="text-sm text-slate-400">US AQI</span></div>
+                <div class="mt-4 w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden"><div id="bar-aqi" class="bg-red-500 h-1.5 rounded-full transition-all duration-1000" style="width: 0%"></div></div>
+                <p id="txt-aqi" class="text-xs text-red-500 mt-2 font-medium">Unhealthy</p>
+            </div>
+            
+            <div class="glass p-6 rounded-2xl shadow-sm hover:shadow-xl transition-shadow reveal relative overflow-hidden group">
+                <div class="absolute top-0 left-0 w-1 h-full bg-blue-500 transition-all group-hover:w-2"></div>
+                <div class="flex justify-between mb-4">
+                    <h3 class="font-semibold text-slate-500 dark:text-slate-400">Weather</h3>
+                    <i class="fas fa-cloud-sun text-blue-500 opacity-50"></i>
+                </div>
+                <div class="flex items-baseline gap-2"><span id="val-temp" class="text-4xl font-bold counter" data-target="0">--</span><span class="text-sm text-slate-400">°C</span></div>
+                <div class="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                    <span id="val-condition">--</span>
+                </div>
+                <p class="text-xs text-blue-500 mt-2 font-medium">Real-time update</p>
+            </div>
+            
+            <div class="glass p-6 rounded-2xl shadow-sm hover:shadow-xl transition-shadow reveal relative overflow-hidden bg-gradient-to-br from-emerald-500/10 to-transparent lg:col-span-4 mt-6">
+                <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                <h3 class="font-semibold text-emerald-600 dark:text-emerald-400 mb-2"><i class="fas fa-user-md mr-2"></i>Health Advisor</h3>
+                <div id="health-advice" class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Analyzing air quality...
+                </div>
+                <div class="mt-3 flex gap-2">
+                    <span id="badge-mask" class="text-[10px] px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded-full opacity-50">😷 Mask</span>
+                    <span id="badge-outdoor" class="text-[10px] px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded-full opacity-50">🏃 Outdoor</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+            <div class="glass p-4 rounded-2xl lg:col-span-2 shadow-lg relative reveal">
+                <h3 class="text-lg font-bold mb-4 ml-2 dark:text-white"><i class="fas fa-map-marked-alt mr-2 text-emerald-500"></i>Station Location</h3>
+                <div id="map"></div>
+            </div>
+
+            <div class="glass p-6 rounded-2xl flex flex-col reveal">
+                <h3 class="text-lg font-bold mb-4 dark:text-white"><i class="fas fa-calendar-alt mr-2 text-blue-500"></i>3-Day Forecast</h3>
+                <div id="forecast-container" class="space-y-4 flex-1">
+                    <div class="animate-pulse bg-slate-200 dark:bg-slate-700 h-12 rounded"></div>
+                    <div class="animate-pulse bg-slate-200 dark:bg-slate-700 h-12 rounded"></div>
+                    <div class="animate-pulse bg-slate-200 dark:bg-slate-700 h-12 rounded"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-16 bg-white dark:bg-slate-900 transition-colors">
+        <div class="container mx-auto px-6">
+            <h2 class="text-3xl font-bold mb-8 text-center reveal">Pollution Heatmap (2025)</h2>
+            <div class="glass p-6 rounded-2xl overflow-x-auto reveal">
+                <div class="grid grid-cols-6 md:grid-cols-12 gap-2 min-w-[600px]">
+                    <div class="heatmap-cell h-24 rounded-lg bg-orange-400 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Jan: 156 AQI"><span class="font-bold text-white">JAN</span><span class="text-xs text-white/80">156</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-red-500 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Feb: 178 AQI"><span class="font-bold text-white">FEB</span><span class="text-xs text-white/80">178</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-yellow-400 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Mar: 110 AQI"><span class="font-bold text-white">MAR</span><span class="text-xs text-white/80">110</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-green-400 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Apr: 85 AQI"><span class="font-bold text-white">APR</span><span class="text-xs text-white/80">85</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-emerald-500 flex flex-col justify-center items-center cursor-pointer" data-tooltip="May: 45 AQI"><span class="font-bold text-white">MAY</span><span class="text-xs text-white/80">45</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-emerald-500 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Jun: 50 AQI"><span class="font-bold text-white">JUN</span><span class="text-xs text-white/80">50</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-emerald-400 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Jul: 60 AQI"><span class="font-bold text-white">JUL</span><span class="text-xs text-white/80">60</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-green-400 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Aug: 75 AQI"><span class="font-bold text-white">AUG</span><span class="text-xs text-white/80">75</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-yellow-400 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Sep: 105 AQI"><span class="font-bold text-white">SEP</span><span class="text-xs text-white/80">105</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-orange-400 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Oct: 145 AQI"><span class="font-bold text-white">OCT</span><span class="text-xs text-white/80">145</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-red-600 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Nov: 210 AQI"><span class="font-bold text-white">NOV</span><span class="text-xs text-white/80">210</span></div>
+                    <div class="heatmap-cell h-24 rounded-lg bg-red-500 flex flex-col justify-center items-center cursor-pointer" data-tooltip="Dec: 190 AQI"><span class="font-bold text-white">DEC</span><span class="text-xs text-white/80">190</span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-20 px-6 container mx-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div class="reveal">
+                <h3 class="text-2xl font-bold mb-6 text-center">Pollution Sources</h3>
+                <div class="relative h-[300px] w-full flex justify-center"><canvas id="sourcePieChart"></canvas></div>
+            </div>
+            <div class="reveal">
+                <h3 class="text-2xl font-bold mb-6">Contribution by Sector</h3>
+                <div class="glass p-4 rounded-xl"><canvas id="sourceBarChart"></canvas></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-20 bg-slate-100 dark:bg-slate-800 transition-colors">
+        <div class="container mx-auto px-6">
+            <h2 class="text-3xl font-bold mb-12 text-center reveal">Why This Matters</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div class="space-y-8">
+                    <div class="flex items-start gap-4 reveal"><div class="p-3 bg-red-100 text-red-600 rounded-lg text-2xl">🚗</div><div><h4 class="font-bold text-lg">Transport Emissions</h4><p class="text-sm text-slate-500">45% of pollution comes from aging vehicle fleets.</p></div></div>
+                    <div class="flex items-start gap-4 reveal"><div class="p-3 bg-orange-100 text-orange-600 rounded-lg text-2xl">🏭</div><div><h4 class="font-bold text-lg">Industrial Waste</h4><p class="text-sm text-slate-500">Unregulated factory outputs contribute significant PM.</p></div></div>
+                    <div class="flex items-start gap-4 reveal"><div class="p-3 bg-yellow-100 text-yellow-600 rounded-lg text-2xl">🏗️</div><div><h4 class="font-bold text-lg">Construction Dust</h4><p class="text-sm text-slate-500">Rapid urbanization leads to high PM10 levels.</p></div></div>
+                </div>
+                <div class="grid grid-cols-1 gap-6">
+                    <div class="glass p-6 rounded-xl border-l-4 border-red-500 reveal"><div class="text-4xl font-bold text-slate-800 dark:text-white counter" data-target="7000000">0</div><div class="text-sm font-semibold uppercase text-red-500 mt-1">Premature Deaths Annually</div></div>
+                    <div class="glass p-6 rounded-xl border-l-4 border-orange-500 reveal"><div class="flex items-baseline gap-1"><span class="text-4xl font-bold text-slate-800 dark:text-white">$</span><span class="text-4xl font-bold text-slate-800 dark:text-white counter" data-target="225">0</span><span class="text-xl font-bold text-slate-800 dark:text-white">B</span></div><div class="text-sm font-semibold uppercase text-orange-500 mt-1">Lost Global Economy</div></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-20 px-6 container mx-auto">
+        <h2 class="text-3xl font-bold mb-4 text-center reveal">AQI Forecast Model</h2>
+        <div class="glass p-6 rounded-2xl shadow-lg reveal"><canvas id="trendChart" height="100"></canvas></div>
+    </section>
+
+    <footer class="bg-slate-900 text-white py-20 px-6 no-print">
+        <div class="container mx-auto max-w-4xl text-center">
+            <h2 class="text-4xl font-bold mb-6">Join 10K+ Users Fighting Pollution</h2>
+            <form id="signupForm" class="flex flex-col sm:flex-row gap-4 justify-center max-w-md mx-auto relative">
+                <input type="email" placeholder="Enter your email" class="px-6 py-4 rounded-lg bg-slate-800 border border-slate-700 w-full text-white placeholder-slate-500 transition-colors">
+                <button type="button" class="btn btn-primary btn-shine px-8 py-4 bg-emerald-500 hover:bg-emerald-600 font-bold rounded-lg whitespace-nowrap">Sign Up Free</button>
+            </form>
+            <p class="mt-8 text-slate-600 text-sm">© 2025 PolluTrack Inc.</p>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- CONFIGURATION ---
+            const API_TOKEN = 'cf1d6174ed31eaa6ced32daf5812c0fbbde74443'; 
+            let mapInstance = null;
+            let mapMarker = null;
+
+            // --- 1. THEME LOGIC ---
+            const themeBtn = document.getElementById('themeToggle');
+            const sunIcon = document.getElementById('sunIcon');
+            const moonIcon = document.getElementById('moonIcon');
+            const html = document.documentElement;
+
+            if (localStorage.getItem('theme') === 'dark') {
+                html.classList.add('dark');
+                sunIcon.classList.remove('hidden'); moonIcon.classList.add('hidden');
+            }
+
+            if(themeBtn) {
+                themeBtn.addEventListener('click', () => {
+                    html.classList.toggle('dark');
+                    const isDark = html.classList.contains('dark');
+                    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                    sunIcon.classList.toggle('hidden', !isDark);
+                    moonIcon.classList.toggle('hidden', isDark);
+                    updateChartsTheme();
+                });
+            }
+
+            // --- 2. NOTIFICATIONS LOGIC ---
+            const notifyBtn = document.getElementById('notifyBtn');
+            notifyBtn.addEventListener('click', () => {
+                if (!("Notification" in window)) {
+                    alert("This browser does not support desktop notifications");
+                } else if (Notification.permission === "granted") {
+                    new Notification("PolluTrack Alerts Active", { body: "You will be notified if air quality drops." });
+                } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === "granted") {
+                            new Notification("PolluTrack Alerts Active");
+                        }
+                    });
+                }
+            });
+
+            function checkAirQualityAlert(aqi) {
+                if (aqi > 150 && Notification.permission === "granted") {
+                    new Notification("⚠️ Hazardous Air Quality", { 
+                        body: `AQI is currently ${aqi}. Please wear a mask and avoid outdoor activities.` 
+                    });
+                }
+            }
+
+            // --- 3. COUNTER ANIMATION ---
+            const counterObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const counter = entry.target;
+                        const target = +counter.getAttribute('data-target');
+                        if (target === 0) return;
+                        
+                        const duration = 1500;
+                        let start = 0;
+                        const increment = target / (duration / 16); 
+                        
+                        const updateCount = () => {
+                            start += increment;
+                            if (start < target) {
+                                counter.innerText = Math.ceil(start).toLocaleString();
+                                requestAnimationFrame(updateCount);
+                            } else {
+                                counter.innerText = target.toLocaleString();
+                            }
+                        };
+                        updateCount();
+                        counterObserver.unobserve(counter);
+                    }
+                });
+            }, { threshold: 0.1 });
+
+            // --- 4. MAP LOGIC (Leaflet) ---
+            function initMap(lat, lon, aqi, color) {
+                if (mapInstance) {
+                    mapInstance.remove();
+                }
+                mapInstance = L.map('map').setView([lat, lon], 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap'
+                }).addTo(mapInstance);
+
+                mapMarker = L.circle([lat, lon], {
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.5,
+                    radius: 1500
+                }).addTo(mapInstance);
+                
+                mapMarker.bindPopup(`<b>Monitoring Station</b><br>AQI: ${aqi}`).openPopup();
+            }
+
+            // --- 5. CHART SETUP ---
+            let sourcePieChart, sourceBarChart, trendChart;
+
+            function getThemeColors() {
+                const isDark = html.classList.contains('dark');
+                return {
+                    text: isDark ? '#cbd5e1' : '#64748b',
+                    grid: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+                };
+            }
+
+            function initCharts() {
+                const colors = getThemeColors();
+                // Pie Chart
+                const pieCtx = document.getElementById('sourcePieChart');
+                if (pieCtx && !sourcePieChart) {
+                    sourcePieChart = new Chart(pieCtx.getContext('2d'), {
+                        type: 'doughnut',
+                        data: { labels: ['Vehicles', 'Industrial', 'Construction', 'Biomass'], datasets: [{ data: [45, 30, 15, 10], backgroundColor: ['#ef4444', '#f97316', '#eab308', '#10b981'], borderWidth: 0 }] },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: colors.text } } }, cutout: '70%' }
+                    });
+                }
+                // Bar Chart
+                const barCtx = document.getElementById('sourceBarChart');
+                if (barCtx && !sourceBarChart) {
+                    sourceBarChart = new Chart(barCtx.getContext('2d'), {
+                        type: 'bar',
+                        data: { labels: ['Vehicles', 'Industrial', 'Construction', 'Biomass'], datasets: [{ data: [45, 30, 15, 10], backgroundColor: ['#ef4444', '#f97316', '#eab308', '#10b981'], borderRadius: 6 }] },
+                        options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: colors.text } }, y: { grid: { display: false }, ticks: { color: colors.text } } } }
+                    });
+                }
+                // Trend Chart
+                const trendCtx = document.getElementById('trendChart');
+                if (trendCtx && !trendChart) {
+                    trendChart = new Chart(trendCtx.getContext('2d'), {
+                        type: 'line',
+                        data: {
+                            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                            datasets: [{ label: 'AQI Trend', data: [50, 60, 55, 70, 65, 80, 75, 90, 85, 100, 95, 110], borderColor: '#8B5CF6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, tension: 0.4 }]
+                        },
+                        options: { responsive: true, plugins: { legend: { labels: { color: colors.text } } }, scales: { y: { beginAtZero: true, grid: { color: colors.grid }, ticks: { color: colors.text } }, x: { grid: { display: false }, ticks: { color: colors.text } } } }
+                    });
+                }
+            }
+
+            function updateChartsTheme() {
+                const colors = getThemeColors();
+                if(sourcePieChart) { sourcePieChart.options.plugins.legend.labels.color = colors.text; sourcePieChart.update(); }
+                if(sourceBarChart) { sourceBarChart.options.scales.x.ticks.color = colors.text; sourceBarChart.options.scales.y.ticks.color = colors.text; sourceBarChart.update(); }
+                if(trendChart) { trendChart.options.scales.y.grid.color = colors.grid; trendChart.options.scales.y.ticks.color = colors.text; trendChart.options.scales.x.ticks.color = colors.text; trendChart.options.plugins.legend.labels.color = colors.text; trendChart.update(); }
+            }
+
+            function updateChartsData(sourceData, trendData) {
+                if(sourcePieChart) { sourcePieChart.data.datasets[0].data = sourceData; sourcePieChart.update(); }
+                if(sourceBarChart) { sourceBarChart.data.datasets[0].data = sourceData; sourceBarChart.update(); }
+                if(trendChart) { trendChart.data.datasets[0].data = trendData; trendChart.update(); }
+            }
+
+            // --- 6. DATA FETCHING ---
+            async function fetchCityData(query) {
+                try {
+                    let url = query.startsWith('geo:') 
+                        ? `https://api.waqi.info/feed/${query}/?token=${API_TOKEN}`
+                        : `https://api.waqi.info/feed/${query}/?token=${API_TOKEN}`;
+
+                    const response = await fetch(url);
+                    const json = await response.json();
+
+                    if (json.status !== 'ok') throw new Error('City not found');
+
+                    const data = json.data;
+                    const realAQI = data.aqi;
+                    const realPM25 = data.iaqi.pm25 ? data.iaqi.pm25.v : Math.floor(realAQI * 0.6);
+                    const realPM10 = data.iaqi.pm10 ? data.iaqi.pm10.v : Math.floor(realAQI * 0.85);
+                    const lat = data.city.geo[0];
+                    const lon = data.city.geo[1];
+
+                    // Estimate Charts
+                    let v, i, c, b;
+                    if(realAQI > 150) { v=30; i=40; c=20; b=10; } 
+                    else if (realAQI > 100) { v=50; i=20; c=20; b=10; } 
+                    else { v=25; i=25; c=25; b=25; }
+                    const history = Array.from({length: 12}, () => Math.floor(realAQI + (Math.random() * 40 - 20)));
+
+                    const processedData = {
+                        pm25: realPM25,
+                        pm10: realPM10,
+                        aqi: realAQI,
+                        sources: [v, i, c, b],
+                        history: history,
+                        temp: data.iaqi.t ? data.iaqi.t.v : 25, 
+                        humidity: data.iaqi.h ? data.iaqi.h.v : 50,
+                        forecast: data.forecast ? data.forecast.daily.pm25 : []
+                    };
+
+                    updateDashboard(processedData, lat, lon);
+                    if(query.startsWith('geo:')) document.getElementById('citySearch').value = data.city.name;
+
+                } catch (error) {
+                    console.error(error);
+                    document.getElementById('lastUpdated').innerText = "City not found!";
+                    document.getElementById('lastUpdated').classList.add('text-red-500');
+                }
+            }
+
+            function updateDashboard(data, lat, lon) {
+                document.getElementById('lastUpdated').innerText = new Date().toLocaleTimeString();
+                document.getElementById('lastUpdated').classList.remove('text-red-500');
+
+                // Update Numbers & Bars
+                const updateEl = (id, val) => {
+                    const el = document.getElementById(id);
+                    if(el) { el.innerText = val; el.setAttribute('data-target', val); }
+                    const bar = document.getElementById("bar-" + id.split('-')[1]);
+                    if(bar) bar.style.width = Math.min((val/(id.includes('aqi')?300:200))*100, 100) + '%';
+                };
+                updateEl("val-pm25", data.pm25);
+                updateEl("val-pm10", data.pm10);
+                updateEl("val-aqi", data.aqi);
+                
+                document.getElementById('val-temp').innerText = data.temp;
+                document.getElementById('val-condition').innerHTML = `Real-time <span class="opacity-50">| Humidity: ${data.humidity}%</span>`;
+
+                // Health Advisor & Map Color
+                const adviceEl = document.getElementById('health-advice');
+                const aqiText = document.getElementById('txt-aqi');
+                let colorClass = "#10B981"; // Green
+                
+                if (data.aqi > 150) {
+                    adviceEl.innerHTML = "⚠️ <b>Hazardous.</b> Wear mask. Avoid outdoor activities.";
+                    if(aqiText) aqiText.innerText = "Hazardous"; colorClass = "#EF4444";
+                } else if (data.aqi > 100) {
+                    adviceEl.innerHTML = "😷 <b>Unhealthy.</b> Sensitive groups wear masks.";
+                    if(aqiText) aqiText.innerText = "Unhealthy"; colorClass = "#F97316";
+                } else {
+                    adviceEl.innerHTML = "✅ <b>Good.</b> Air quality is safe.";
+                    if(aqiText) aqiText.innerText = "Good"; colorClass = "#10B981";
+                }
+
+                // Update Charts, Map, Alert
+                updateChartsData(data.sources, data.history);
+                initMap(lat, lon, data.aqi, colorClass);
+                checkAirQualityAlert(data.aqi);
+
+                // Update Forecast
+                const forecastContainer = document.getElementById('forecast-container');
+                if(data.forecast && data.forecast.length > 0) {
+                    forecastContainer.innerHTML = "";
+                    const next3Days = data.forecast.slice(0, 3);
+                    next3Days.forEach(day => {
+                        const date = new Date(day.day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        const html = `
+                            <div class="flex justify-between items-center p-3 rounded bg-slate-100 dark:bg-slate-800/50">
+                                <span class="font-bold text-sm dark:text-white">${date}</span>
+                                <div class="text-xs">
+                                    <span class="text-emerald-500 font-bold">Min: ${day.min}</span> / 
+                                    <span class="text-red-500 font-bold">Max: ${day.max}</span>
+                                </div>
+                            </div>
+                        `;
+                        forecastContainer.innerHTML += html;
+                    });
+                }
+            }
+
+            // --- 7. INIT & LISTENERS ---
+            initCharts();
+            fetchCityData("New Delhi"); // Default
+            
+            document.querySelectorAll('.counter').forEach(c => counterObserver.observe(c));
+
+            document.getElementById('citySearch').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    document.getElementById('lastUpdated').innerText = "Fetching...";
+                    fetchCityData(e.target.value);
+                }
+            });
+
+            document.getElementById('locateBtn').addEventListener('click', () => {
+                if (navigator.geolocation) {
+                    document.getElementById('lastUpdated').innerText = "Locating...";
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => fetchCityData(`geo:${pos.coords.latitude};${pos.coords.longitude}`),
+                        (err) => alert("Location access denied.")
+                    );
+                }
+            });
+
+            // Particles
+            const pContainer = document.getElementById('particles');
+            for (let i = 0; i < 20; i++) {
+                const p = document.createElement('div');
+                p.classList.add('particle');
+                p.style.left = Math.random() * 100 + '%';
+                p.style.animationDuration = (Math.random() * 20 + 10) + 's';
+                p.style.width = (Math.random() * 10 + 2) + 'px'; p.style.height = p.style.width;
+                pContainer.appendChild(p);
+            }
+            
+            // Scroll Reveal
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('active'); });
+            }, { threshold: 0.1 });
+            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+        });
+    </script>
+</body>
+</html>
