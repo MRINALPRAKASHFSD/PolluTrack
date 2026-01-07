@@ -1,6 +1,7 @@
 # 🌍 PolluTrack - Real-time Air Quality Intelligence
 
-![PolluTrack Banner](https://via.placeholder.com/1000x400?text=PolluTrack+Dashboard+Preview)
+![PolluTrack Banner](banner.png)
+
 **PolluTrack** is a modern, real-time air quality monitoring application that tracks pollution levels (AQI, PM2.5, PM10) for any city worldwide. Built with a glassmorphism UI, it features interactive maps, health advice, and predictive forecasting.
 
 🚀 **[View Live Demo](https://pollu-track-topaz.vercel.app/)**
@@ -67,7 +68,7 @@ This project uses the **WAQI API**. While a demo key is included, it is recommen
 
 | Light Mode | Dark Mode |
 |:---:|:---:|
-| <img src="https://via.placeholder.com/400x200?text=Light+Mode" width="400"> | <img src="https://via.placeholder.com/400x200?text=Dark+Mode" width="400"> |
+| <img src="light-mode.png" width="400" alt="Light Mode Screenshot"> | <img src="dark-mode.png" width="400" alt="Dark Mode Screenshot"> |
 
 ---
 
