@@ -1,6 +1,6 @@
 # 🌍 PolluTrack - Real-time Air Quality Intelligence
 
-![PolluTrack Banner](banner.png)
+
 
 **PolluTrack** is a modern, real-time air quality monitoring application that tracks pollution levels (AQI, PM2.5, PM10) for any city worldwide. Built with a glassmorphism UI, it features interactive maps, health advice, and predictive forecasting.
 
@@ -63,23 +63,6 @@ This project uses the **WAQI API**. While a demo key is included, it is recommen
 4.  Replace it with your new token.
 
 ---
-
-## 📸 Screenshots
-
-| Light Mode | Dark Mode |
-|:---:|:---:|
-| <img src="light-mode.png" width="400" alt="Light Mode Screenshot"> | <img src="dark-mode.png" width="400" alt="Dark Mode Screenshot"> |
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome!
-1.  Fork the Project
-2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4.  Push to the Branch (`git push origin feature/AmazingFeature`)
-5.  Open a Pull Request
 
 ---
 
