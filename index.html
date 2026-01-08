@@ -198,10 +198,15 @@
                 <h2 class="text-3xl font-bold mb-2">Live Dashboard</h2>
                 <div class="flex items-center gap-4 text-slate-500 dark:text-slate-400">
                     <span>Monitoring:</span>
-                    <div class="search-container relative">
-                        <input type="text" id="citySearch" value="New Delhi" class="search-input text-slate-900 dark:text-white">
-                        <i class="fas fa-search absolute right-0 top-2 text-xs opacity-50 text-slate-500"></i>
+                    
+                    <div class="search-container relative flex items-center">
+                        <input type="text" id="citySearch" value="New Delhi" class="search-input text-slate-900 dark:text-white pr-8">
+                        <i class="fas fa-search absolute right-2 top-2 text-xs opacity-50 text-slate-500"></i>
+                        <button id="voiceBtn" class="ml-2 text-slate-400 hover:text-emerald-500 transition-colors tooltip-trigger" title="Voice Search">
+                            <i class="fas fa-microphone"></i>
+                        </button>
                     </div>
+
                     <button id="locateBtn" class="p-2 rounded-full bg-slate-200 dark:bg-slate-800 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all shadow-md group" title="Use my location">
                         <i class="fas fa-location-crosshairs group-hover:scale-110 transition-transform"></i>
                     </button>
@@ -287,7 +292,7 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
             <div class="glass p-4 rounded-2xl lg:col-span-2 shadow-lg relative reveal">
-                <h3 class="text-lg font-bold mb-4 ml-2 dark:text-white"><i class="fas fa-map-marked-alt mr-2 text-emerald-500"></i>Station Location</h3>
+                <h3 class="text-lg font-bold mb-4 ml-2 dark:text-white"><i class="fas fa-map-marked-alt mr-2 text-emerald-500"></i>Station Radar</h3>
                 <div id="map"></div>
             </div>
 
@@ -397,6 +402,12 @@
                     sunIcon.classList.toggle('hidden', !isDark);
                     moonIcon.classList.toggle('hidden', isDark);
                     updateChartsTheme();
+                    
+                    // Re-initialize map to switch dark/light tiles if map exists
+                    if(mapInstance) {
+                        const cityInput = document.getElementById('citySearch').value;
+                        fetchCityData(cityInput); 
+                    }
                 });
             }
 
@@ -451,24 +462,40 @@
                 });
             }, { threshold: 0.1 });
 
-            // --- 4. MAP LOGIC (Leaflet) ---
+            // --- 4. MAP LOGIC (UPDATED WITH RADAR LAYER) ---
             function initMap(lat, lon, aqi, color) {
                 if (mapInstance) {
                     mapInstance.remove();
                 }
-                mapInstance = L.map('map').setView([lat, lon], 12);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap'
+                
+                // Create Map
+                mapInstance = L.map('map').setView([lat, lon], 11);
+
+                // Layer 1: Base Map (Dark/Light aware)
+                const isDark = html.classList.contains('dark');
+                const tileUrl = isDark 
+                    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' // Dark Mode Map
+                    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'; // Light Mode Map
+
+                L.tileLayer(tileUrl, {
+                    attribution: '© OpenStreetMap & CartoDB'
                 }).addTo(mapInstance);
 
+                // Layer 2: Pollution Heatmap Radar (WAQI Overlay)
+                L.tileLayer(`https://tiles.waqi.info/tiles/usepa-aqi/{z}/{x}/{y}.png?token=${API_TOKEN}`, {
+                    attribution: 'Air Quality Tiles © WAQI',
+                    opacity: 0.5
+                }).addTo(mapInstance);
+
+                // Layer 3: Station Marker
                 mapMarker = L.circle([lat, lon], {
                     color: color,
                     fillColor: color,
-                    fillOpacity: 0.5,
-                    radius: 1500
+                    fillOpacity: 0.8,
+                    radius: 500
                 }).addTo(mapInstance);
                 
-                mapMarker.bindPopup(`<b>Monitoring Station</b><br>AQI: ${aqi}`).openPopup();
+                mapMarker.bindPopup(`<b>Station Location</b><br>AQI: ${aqi}`).openPopup();
             }
 
             // --- 5. CHART SETUP ---
@@ -642,7 +669,8 @@
             
             document.querySelectorAll('.counter').forEach(c => counterObserver.observe(c));
 
-            document.getElementById('citySearch').addEventListener('keypress', (e) => {
+            const searchInput = document.getElementById('citySearch');
+            searchInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     document.getElementById('lastUpdated').innerText = "Fetching...";
                     fetchCityData(e.target.value);
@@ -658,6 +686,33 @@
                     );
                 }
             });
+
+            // NEW: VOICE SEARCH LOGIC
+            const voiceBtn = document.getElementById('voiceBtn');
+            if (voiceBtn && ('webkitSpeechRecognition' in window)) {
+                const recognition = new webkitSpeechRecognition();
+                recognition.continuous = false;
+                recognition.lang = 'en-US';
+
+                voiceBtn.addEventListener('click', () => {
+                    voiceBtn.classList.add('text-red-500', 'animate-pulse'); // Visual Feedback
+                    recognition.start();
+                });
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    searchInput.value = transcript;
+                    fetchCityData(transcript);
+                    voiceBtn.classList.remove('text-red-500', 'animate-pulse');
+                };
+
+                recognition.onerror = () => {
+                    voiceBtn.classList.remove('text-red-500', 'animate-pulse');
+                    alert("Voice recognition failed. Please try again.");
+                };
+            } else {
+                if(voiceBtn) voiceBtn.style.display = 'none'; // Hide if not supported
+            }
 
             // Particles
             const pContainer = document.getElementById('particles');
